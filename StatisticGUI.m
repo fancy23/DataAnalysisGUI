@@ -22,7 +22,7 @@ function varargout = StatisticGUI(varargin)
 
 % Edit the above text to modify the response to help StatisticGUI
 
-% Last Modified by GUIDE v2.5 19-Jul-2017 16:22:29
+% Last Modified by GUIDE v2.5 27-Jul-2017 10:15:20
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -83,97 +83,34 @@ dataTmp = load([pathname,filename]);
 fileNum = size(dataTmp.gates,1);
 fileIdIndex = [];
 for i = 1:fileNum
-    fileIdIndex = [fileIdIndex , ones(1, length(dataTmp.gates{i,2}))*i ];
+    file.name = dataTmp.gates{i,1};
+    file.index = dataTmp.gates{i,2};
+    file.chlname = dataTmp.gates{i,3};
+    file.dir = dataTmp.gates{i,4};
+    fileCell{1,i} = file;
+    fileName{1,i} =  dataTmp.gates{i,1};
 end
-dataTmp.sessionData = [dataTmp.sessionData , fileIdIndex'];
-for i =1:fileNum
-    fileDataMat{i,1} = dataTmp.sessionData(find(dataTmp.sessionData(:,end) == i),:);
-end
-
-
- %%
- % build a selection list to choose the cluster channel
- clusterIdChannel = listdlg('ListString',dataTmp.gates{1,3},'PromptString','Please select the cluster channel',...
-     'SelectionMode','single','ListSize',[200 300]);
- 
- 
-groupID = unique(dataTmp.sessionData(:,clusterIdChannel));
-for i = 1:length(groupID)
-    groupFre(i,1) = length(find(dataTmp.sessionData(:,clusterIdChannel) == groupID(i))) / length(dataTmp.sessionData);
-    for  j =1:fileNum
-          fileFreTmp = length(fileDataMat{j,1}(:,clusterIdChannel) == groupID(i)) /size(fileDataMat{j,1},1);
-          fileFreTmp1(1,j) = fileFreTmp;
-    end
-    groupFileFre(i,:) = fileFreTmp1; 
-end
-
-filterID = questdlg('Please Select the filter                                                                      Filter1 : Cluster Frequency                                                    Filter2: File Frequency in Cluster ','Select Filter?','Filter1','Filter2','Cancel','Cancel');
-if  ~strcmp(filterID,'Cancel')
-    if strcmp(filterID,'Filter1')
-         fIndex = find(groupFre >= 0.001);
-         fGroupId = groupID(fIndex,1);
-    else
-        fIndex = find(max(groupFileFre') >= 0.01)';
-        fGroupId = groupID(fIndex,1);
-    end
-else
-    fGroupId = groupID;
-end
-
-
-% filter out the outlier group
-% sessionMat is the matrix with filtered Groups
-% calulated the mean expression level.
-
-[heatmapMat, sessionMat] = getHeatmapMat(dataTmp.sessionData,fGroupId,clusterIdChannel);
-
-% the last column is the cluster ID.
-% rearrange the heatmap matrix based on the hierarchy clustering
-
-pdata =  pdist(heatmapMat(:,1:end-1),'cosine');
-Z = linkage(pdata,'average');
-[Hx,Hy,Hz] = dendrogram(Z,0);
-clear Hx Hy;
-Hz = fliplr(Hz);
-newHeatmapMat = heatmapMat(Hz',:);
-newClusterIndex = [newHeatmapMat(:,end) , (1:size(heatmapMat,1))' ];
-
-for i =1:size(newClusterIndex,1)
-     groupIdTmp = newClusterIndex(i,1);
-     indexTmp = find(sessionMat(:,clusterIdChannel) == groupIdTmp);
-     sessionMat(indexTmp,clusterIdChannel) = newClusterIndex(i,2);
-end
+clear file;
+sessionData = dataTmp.sessionData;
 
 %% output the cluster by files
-fileSortIndex = [];
 
-for i  = 1:fileNum
-    fileData.filename = dataTmp.gates{i,1};
-    fileData.chlname = dataTmp.gates{i,3};
-    fileData.data = sessionMat(find(sessionMat(:,end) == i),:);
-    fileGroup{i,1} = fileData;
-    fileName{i,1} = dataTmp.gates{i,1};
-    
-   for j =1:length(fGroupId)
-      cellFreMat(i,j) = length(find(fileData.data(:,end -3) == j)) / size(fileData.data,1) * 100;
-   end
-end
-    clear fileData; 
-       
 set(handles.fileName,'String',fileName);
-set(handles.ChannelName,'String',[fileGroup{1,1}.chlname, 'Gates']);  
+set(handles.ChannelName,'String',fileCell{1,1}.chlname);  
 set(handles.listbox3,'string',{});
 
-axes(handles.axes1);
-scatter(sessionMat(:,end-2),sessionMat(:,end-1),10,'k','filled');
+handles.sessionData = sessionData;
+handles.fileCell = fileCell;
 
 handles.channelList.string = {};
 handles.channelList.value = {};
-handles.cellFreMat = cellFreMat;
-handles.heatmapMat = newHeatmapMat;
-handles.dataSet = dataTmp;
-handles.fileGroup = fileGroup; 
-handles.sessionMat = sessionMat;
+
+channelList = get(handles.ChannelName,'String');
+ clusterIdChannel = listdlg('ListString',channelList,'PromptString','Please select the channel for clustering',...
+     'SelectionMode','mutiple','ListSize',[200 300]);
+ 
+ handles.clusterChannel = clusterIdChannel;
+ 
 guidata(hObject, handles);
 
 
@@ -184,10 +121,28 @@ function fileName_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 fileID = get(hObject,'value');
 if length(fileID) == 1
-    set(handles.edit1,'string',num2str(size(handles.fileGroup{fileID,1}.data,1)));
+    set(handles.edit1,'string',num2str(length(handles.fileCell{1,fileID}.index)));
+    set(handles.ChannelName,'String',handles.fileCell{1,fileID}.chlname);
 else
     set(handles.edit1,'string','');
+    for i =1:length(fileID)
+        chlNameCell{1,i} = handles.fileCell{1,fileID(i)}.chlname;
+    end
+    k = 0;
+    for i =1:length(fileID) - 1
+        if isequal(chlNameCell{1,i},chlNameCell{1,i+1})
+        else
+            warndlg('The Channel Name of Selected files is not equal !');
+            set(handles.ChannelName,'String','');
+            k =1;
+            break;
+        end
+    end
+    if k == 0
+        set(handles.ChannelName,'String',handles.fileCell{1,fileID(i)}.chlname);
+    end     
 end
+
 guidata(hObject, handles);
 
 
@@ -267,47 +222,65 @@ function Plot_Callback(hObject, eventdata, handles)
 % hObject    handle to Plot (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-
-markerVol = length(get(handles.ChannelName,'String'));
-markerId = get(handles.ChannelName,'value');
-if length(markerId) >1
-    errordlg('Please Select One Marker');
-elseif markerId ~= markerVol & markerId ~= markerVol - 3 
-    cla reset;
-    axes(handles.axes1);
-    scatter(handles.sessionMat(:,end-2),handles.sessionMat(:,end-1),10,handles.sessionMat(:,markerId),'filled');
-    clim = [prctile(handles.sessionMat(:,markerId), 0.3) prctile(handles.sessionMat(:,markerId), 99.7)];
-    colormap( jet(10)) ;
-    colorbar;
-    caxis(clim);
-elseif  markerId == markerVol
-    fileId = get(handles.fileName,'value'); 
-    sessionData = [] ;
-    colorMat = {};
-     color_str = {'b', 'r', 'g', 'm' ,'y', 'm', 'c', 'k'} ;
-     cla reset;
-     hold on;
-    for i =1: length(fileId)
-        sessionData =handles.fileGroup{fileId(i),1}.data;
-        scatter(sessionData(:,end-2),sessionData(:,end-1),10,color_str{i},'filled');  
-        legendname{1,i} = handles.fileGroup{fileId(i),1}.filename;
-    end
-    hold off;
-   legend(legendname,'Interpreter','none');
+if ~isfield(handles,'visneFileIndex')
+    warndlg('Please select the visne Files');
+    return
 else
-    cla reset;
-    groupID = unique(handles.sessionMat(:,end-3));
-    colorMat = jet(20);
-    hold on ;
-    for i = 1:length(groupID)
-        groupIdTmp = groupID(i);
-        sessionData = handles.sessionMat(find(handles.sessionMat(:,end-3) == groupIdTmp),:);
-        legendName{1,i} = ['Cluster: ', num2str(groupIdTmp)];
-        k = mod(i,20);
-        scatter(sessionData(:,end-2),sessionData(:,end-1),10,colorMat(k+1,:),'filled'); 
-    end
-    legend(legendName,'Interpreter','none');
+end
+visneFileId = handles.visneFileIndex;
 
+
+channelList =handles.fileCell{1,visneFileId(1)}.chlname;
+set(handles.ChannelName,'String',[channelList , 'Gates']);
+tsne1Id = find(strcmp(channelList,'bh-SNE1'));
+tsne2Id = find(strcmp(channelList,'bh-SNE2'));
+clusterChlId = find(strcmp(channelList,handles.cluChlName));
+if length(tsne1Id) == 0 | length(tsne2Id) == 0
+    warndlg(' Cannot find the tsne channel ! ');
+else
+    markerId = get(handles.ChannelName,'value');
+    if length(markerId) >1
+        errordlg('Please Select One Marker');
+    elseif markerId ~= clusterChlId & markerId ~= length(channelList) + 1
+        cla reset;
+        axes(handles.axes1);
+        scatter(handles.fSessionData(:,tsne1Id),handles.fSessionData(:,tsne2Id),10,handles.fSessionData(:,markerId),'filled');
+        clim = [prctile(handles.fSessionData(:,markerId), 0.3) prctile(handles.fSessionData(:,markerId), 99.7)];
+        colormap( jet(10)) ;
+        colorbar;
+        caxis(clim);
+    elseif  markerId == length(channelList) + 1
+        cla reset;
+        k =0;
+        fileId = handles.visneFileIndex; 
+        sessionData = [] ;
+        colorMat = {};
+        color_str = {'b', 'r', 'g', 'm' ,'y', 'm', 'c', 'k'} ;
+        cla reset;
+        hold on;
+        for i =1: length(fileId)
+            sessionData = handles.sessionData(handles.fileCell{1,fileId(i)}.findex,:);
+            k = mod(i,8) + 1;
+            scatter(sessionData(:,tsne1Id),sessionData(:,tsne2Id),10,color_str{k},'filled');  
+            legendname{1,i} = handles.fileCell{1,fileId(i)}.name;
+        end
+        hold off;
+       legend(legendname,'Interpreter','none');
+
+    else
+        cla reset;
+        groupID = unique(handles.fSessionData(:,clusterChlId));
+        colorMat = jet(20);
+        hold on ;
+        for i = 1:length(groupID)
+            groupIdTmp = groupID(i);
+            sessionData = handles.fSessionData(find(handles.fSessionData(:,clusterChlId) == groupIdTmp),:);
+            legendName{1,i} = ['Cluster: ', num2str(groupIdTmp)];
+            k = mod(i,20);
+            scatter(sessionData(:,tsne1Id),sessionData(:,tsne2Id),10,colorMat(k+1,:),'filled'); 
+        end
+        legend(legendName,'Interpreter','none');
+    end
 end
 guidata(hObject, handles);
 
@@ -333,7 +306,7 @@ function OutputCellMat_Callback(hObject, eventdata, handles)
 % hObject    handle to OutputCellMat (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-cellFreMat = handles.cellFreMat;
+cellFreMat = handles.cellFreMat .* 100;
 clusterStr = [];
 for i =1:size(cellFreMat,2)
     eval(['Cluster',num2str(i),'= cellFreMat(:,i);']);
@@ -341,6 +314,7 @@ for i =1:size(cellFreMat,2)
 end
 clusterStr = clusterStr(1,1:end-1);
 FileName = get(handles.fileName,'String');
+FileName = FileName(handles.oriFileIndex,1);
 eval(['T = table(FileName,',clusterStr,');']);
 [filename,filedir] = uiputfile('CellFreMat.csv');
 writetable(T,[filedir,filename],'Delimiter',',');
@@ -356,61 +330,76 @@ function OutvisneImage_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 filedir = uigetdir();
-channelId = get(handles.ChannelName,'value');
-channelName = get(handles.ChannelName,'String');
-markerVol = length(channelName);
-
-for i = 1:length(channelId)
-     
-      markerId = channelId(i);
-       markerName = channelName{markerId};
-      
-     if markerId ~= markerVol & markerId ~= markerVol - 3 
-            figure;
-            scatter(handles.sessionMat(:,end-2),handles.sessionMat(:,end-1),10,handles.sessionMat(:,markerId),'filled');
-            clim = [prctile(handles.sessionMat(:,markerId), 0.3) prctile(handles.sessionMat(:,markerId), 99.7)];
-            colormap( jet(10)) ;
-            colorbar;
-            caxis(clim);
-            title(markerName,'Interpreter','none');
-            set(gcf,'Position',[0 0 1800 1500]);
-            saveas(gcf,[filedir,'\',markerName,'.jpeg']);
-            close Figure 1;
-            
-      elseif  markerId == markerVol
-            figure;
-             color_str = {'b', 'r', 'g', 'm' ,'y', 'm', 'c', 'k'} ;
-             cla reset;
-             hold on;
-        for i =1: length(get(handles.fileName,'String'))
-            sessionData =handles.fileGroup{i,1}.data;
-            scatter(sessionData(:,end-2),sessionData(:,end-1),10,color_str{i},'filled');  
-            legendname{1,i} = handles.fileGroup{i,1}.filename;
-        end
-            hold off;
-           legend(legendname,'Interpreter','none');
-            title(markerName,'Interpreter','none');
-            set(gcf,'Position',[0 0 1800 1500]);
-            saveas(gcf,[filedir,'\',markerName,'.jpeg']);
-            close Figure 1;
-     else
-        figure;
-        groupID = unique(handles.sessionMat(:,end-3));
-        colorMat = jet(20);
-        hold on ;
-     for i = 1:length(groupID)
-        groupIdTmp = groupID(i);
-        sessionData = handles.sessionMat(find(handles.sessionMat(:,end-3) == groupIdTmp),:);
-        legendName{1,i} = ['Cluster: ', num2str(groupIdTmp)];
-        k = mod(i,20);
-        scatter(sessionData(:,end-2),sessionData(:,end-1),10,colorMat(k+1,:),'filled'); 
-     end
-        legend(legendName,'Interpreter','none');
-         set(gcf,'Position',[0 0 1800 1500]);
-        saveas(gcf,[filedir,'\',markerName,'.jpeg']);
-        close Figure 1;
-     end
+%%
+if ~isfield(handles,'visneFileIndex')
+    warndlg('Please select the visne Files');
+    return
+else
 end
+
+visneFileId = handles.visneFileIndex;
+channelList =handles.fileCell{1,visneFileId(1)}.chlname;
+tsne1Id = find(strcmp(channelList,'bh-SNE1'));
+tsne2Id = find(strcmp(channelList,'bh-SNE2'));
+clusterChlId = find(strcmp(channelList,handles.cluChlName));
+
+markerList = get(handles.ChannelName,'value');
+for i =1:length(markerList)
+    markerId = markerList(i);
+            if markerId ~= clusterChlId & markerId ~= length(channelList) + 1  % normal marker
+                markerName = channelList{1,markerId};
+                figure;
+                scatter(handles.fSessionData(:,tsne1Id),handles.fSessionData(:,tsne2Id),10,handles.fSessionData(:,markerId),'filled');
+                clim = [prctile(handles.fSessionData(:,markerId), 0.3) prctile(handles.fSessionData(:,markerId), 99.7)];
+                colormap( jet(10)) ;
+                colorbar;
+                caxis(clim);
+                title(markerName,'Interpreter','none');
+                set(gcf,'Position',[0 0 1800 1500]);
+                saveas(gcf,[filedir,'\',markerName,'.jpeg']);
+                close Figure 1;
+            elseif  markerId == length(channelList) + 1 % gates
+                figure;
+                k =0;
+                fileId = handles.visneFileIndex; 
+                sessionData = [] ;
+                colorMat = {};
+                color_str = {'b', 'r', 'g', 'm' ,'y', 'm', 'c', 'k'} ;
+                cla reset;
+                hold on;
+                for i =1: length(fileId)
+                    sessionData = handles.sessionData(handles.fileCell{1,fileId(i)}.findex,:);
+                    k = mod(i,8) + 1;
+                    scatter(sessionData(:,tsne1Id),sessionData(:,tsne2Id),10,color_str{k},'filled');  
+                    legendname{1,i} = handles.fileCell{1,fileId(i)}.name;
+                end
+                hold off;
+               legend(legendname,'Interpreter','none');
+                title('Gates','Interpreter','none');
+                set(gcf,'Position',[0 0 1800 1500]);
+                saveas(gcf,[filedir,'\gates.jpeg']);
+                close Figure 1;
+            else              % cluster Channel
+                figure;
+                groupID = unique(handles.fSessionData(:,clusterChlId));
+                colorMat = jet(20);
+                hold on ;
+                for i = 1:length(groupID)
+                    groupIdTmp = groupID(i);
+                    sessionData = handles.fSessionData(find(handles.fSessionData(:,clusterChlId) == groupIdTmp),:);
+                    legendName{1,i} = ['Cluster: ', num2str(groupIdTmp)];
+                    k = mod(i,20);
+                    scatter(sessionData(:,tsne1Id),sessionData(:,tsne2Id),10,colorMat(k+1,:),'filled'); 
+                end
+                legend(legendName,'Interpreter','none');
+                set(gcf,'Position',[0 0 1800 1500]);
+                saveas(gcf,[filedir,'\clusters.jpeg']);
+                close Figure 1;
+                
+            end
+end
+
+
       
       
 
@@ -421,16 +410,25 @@ function Outheatmap_Callback(hObject, eventdata, handles)
 % hObject    handle to Outheatmap (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-filedir = uigetdir();
+[filename,filedir] = uiputfile('heatmap.jpeg');
+
 heatmapMat = handles.heatmapMat(:,1:end-1);
+clusterChannel = handles.clusterChannel;
+
 channelId = get(handles.ChannelName,'value');
-channelName = get(handles.ChannelName,'String');
-channelName = channelName(channelId,1);
+
+heatmapColIndex = intersect(channelId,clusterChannel);
+channelName = handles.fileCell{1,handles.oriFileIndex(1)}.chlname;
+channelName = channelName(1,heatmapColIndex);
+
+for i =1:length(heatmapColIndex)
+     heatmapCol(i,1) = find(clusterChannel(1,:) == heatmapColIndex(i));
+end
 for i =1:size(heatmapMat,1)
     yTickName{i,1} = ['Cluster: ',num2str(i)];
 end
 figure;
-imagesc(NormalizeMat(heatmapMat(:,channelId)));
+imagesc(NormalizeMat(heatmapMat(:,heatmapCol)));
 colormap(jet(15));
 colorbar;
 set(gca,'ytick',1:size(heatmapMat,1));
@@ -508,3 +506,132 @@ function edit1_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
+
+
+% --- Executes on button press in filter.
+function filter_Callback(hObject, eventdata, handles)
+% hObject    handle to filter (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+if ~isfield(handles,'oriFileIndex')
+    warndlg('Please select the original Files');
+    return
+else
+end
+
+channelList = get(handles.ChannelName,'String');
+clusterIdChannel = listdlg('ListString',channelList,'PromptString','Please select the cluster channel',...
+     'SelectionMode','single','ListSize',[200 300]); 
+fileId=handles.oriFileIndex;
+  
+  % rearrang the rows based on the phenotype of each cluster
+  [heatmapMatrix,newSessionData ] = getHeatmapMat(handles.sessionData,handles.clusterChannel,clusterIdChannel);
+  
+  handles.newSessionData = newSessionData;
+ 
+ groupID = unique(newSessionData(:,clusterIdChannel));
+for i = 1:length(groupID)
+    groupFre(i,1) = length(find(newSessionData(:,clusterIdChannel) == groupID(i))) / size(newSessionData,1);
+    for  j =1:length(fileId)
+         fileIndex = handles.fileCell{1,fileId(j)}.index;
+         clustIndex = find(newSessionData(:,clusterIdChannel) == groupID(i));
+         fileFreTmp = length(intersect(clustIndex,fileIndex)) / length(handles.fileCell{1,fileId(j)}.index);
+         fileFreTmp1(1,j) = fileFreTmp;
+    end
+    groupFileFre(i,:) = fileFreTmp1; 
+end
+
+filterID = questdlg('Please Select the filter                                                                      Filter1 : Cluster Frequency                                                    Filter2: File Frequency in Cluster ','Select Filter?','Filter1','Filter2','Cancel','Cancel');
+if  ~strcmp(filterID,'Cancel')
+    if strcmp(filterID,'Filter1')
+         fIndex = find(groupFre >= 0.001);
+         fGroupId = groupID(fIndex,1);
+    else
+        fIndex = find(max(groupFileFre') >= 0.01)';
+        fGroupId = groupID(fIndex,1);
+    end
+else
+    fGroupId = groupID;
+end
+
+fHeatmapMatrix = heatmapMatrix(fIndex,:);
+cellFreMat = groupFileFre(fIndex,:)';
+
+% caluculate the new file index
+filterOutId = setxor(fGroupId,groupID);
+sessionIndex = [];
+if length(filterOutId) == 0
+    for i =1:length(fileId)
+         handles.fileCell{1,i}.findex = handles.fileCell{1,i}.index;
+    end
+else
+    for i = 1:length(filterOutId)
+        filterOutIdTmp = filterOutId(i);
+        sessionIndex = [sessionIndex ; find(newSessionData(:,clusterIdChannel) == filterOutIdTmp)];
+    end
+    for i = 1:length(handles.fileCell)
+        fileIndexTmp = handles.fileCell{1,i}.index;
+        fileFilterIdTmp = setxor(fileIndexTmp,intersect(sessionIndex,fileIndexTmp));
+        handles.fileCell{1,i}.findex = fileFilterIdTmp;
+    end
+end
+
+fSessionIndex = setxor(1:size(handles.sessionData,1), sessionIndex);
+handles.fSessionData = newSessionData(fSessionIndex,:);
+
+axes(handles.axes1);
+imagesc(fHeatmapMatrix(:,1:end-1));
+colormap(jet(20));
+
+
+handles.cellFreMat =  cellFreMat;
+handles.heatmapMat = fHeatmapMatrix
+handles.cluChlName = channelList{clusterIdChannel};
+handles.fGroupId = fGroupId;
+
+guidata(hObject, handles);
+
+
+% --- Executes on selection change in filelist.
+function filelist_Callback(hObject, eventdata, handles)
+% hObject    handle to filelist (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: contents = cellstr(get(hObject,'String')) returns filelist contents as cell array
+%        contents{get(hObject,'Value')} returns selected item from filelist
+
+
+% --- Executes during object creation, after setting all properties.
+function filelist_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to filelist (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: listbox controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+% --- Executes on button press in setvisnefiles.
+function setvisnefiles_Callback(hObject, eventdata, handles)
+% hObject    handle to setvisnefiles (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+   fileList = get(handles.fileName,'String');
+  fileId= listdlg('ListString',fileList,'PromptString','Please select the files for filter',...
+     'SelectionMode','mutiple','ListSize',[200 300]);
+ handles.visneFileIndex = fileId;
+ guidata(hObject, handles);
+ 
+% --- Executes on button press in setorgfiles.
+function setorgfiles_Callback(hObject, eventdata, handles)
+% hObject    handle to setorgfiles (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+  fileList = get(handles.fileName,'String');
+  fileId= listdlg('ListString',fileList,'PromptString','Please select the files for filter',...
+     'SelectionMode','mutiple','ListSize',[200 300]);
+ handles.oriFileIndex = fileId;
+ guidata(hObject, handles);
