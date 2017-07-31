@@ -22,7 +22,7 @@ function varargout = StatisticGUI(varargin)
 
 % Edit the above text to modify the response to help StatisticGUI
 
-% Last Modified by GUIDE v2.5 27-Jul-2017 10:15:20
+% Last Modified by GUIDE v2.5 31-Jul-2017 14:14:31
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -355,7 +355,7 @@ for i =1:length(markerList)
                 colorbar;
                 caxis(clim);
                 title(markerName,'Interpreter','none');
-                set(gcf,'Position',[0 0 1800 1500]);
+                set(gcf,'Position',[0 0 1500 1500]);
                 saveas(gcf,[filedir,'\',markerName,'.jpeg']);
                 close Figure 1;
             elseif  markerId == length(channelList) + 1 % gates
@@ -374,9 +374,9 @@ for i =1:length(markerList)
                     legendname{1,i} = handles.fileCell{1,fileId(i)}.name;
                 end
                 hold off;
-               legend(legendname,'Interpreter','none');
+               legend(legendname,'Interpreter','none','Location','bestoutside');
                 title('Gates','Interpreter','none');
-                set(gcf,'Position',[0 0 1800 1500]);
+                set(gcf,'Position',[0 0 1500 1500]);
                 saveas(gcf,[filedir,'\gates.jpeg']);
                 close Figure 1;
             else              % cluster Channel
@@ -391,8 +391,9 @@ for i =1:length(markerList)
                     k = mod(i,20);
                     scatter(sessionData(:,tsne1Id),sessionData(:,tsne2Id),10,colorMat(k+1,:),'filled'); 
                 end
-                legend(legendName,'Interpreter','none');
-                set(gcf,'Position',[0 0 1800 1500]);
+                legend(legendName,'Interpreter','none','Location','bestoutside');
+                title('ClusterID');
+                set(gcf,'Position',[0 0 1500 1500]);
                 saveas(gcf,[filedir,'\clusters.jpeg']);
                 close Figure 1;
                 
@@ -635,3 +636,70 @@ function setorgfiles_Callback(hObject, eventdata, handles)
      'SelectionMode','mutiple','ListSize',[200 300]);
  handles.oriFileIndex = fileId;
  guidata(hObject, handles);
+
+
+% --- Executes on button press in visnegroupplot.
+function visnegroupplot_Callback(hObject, eventdata, handles)
+% hObject    handle to visnegroupplot (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+if ~isfield(handles,'visneFileIndex')
+    warndlg('Please select the visne Files');
+    return
+end
+
+channelList =handles.fileCell{1,handles.visneFileIndex(1)}.chlname;
+tsne1Id = find(strcmp(channelList,'bh-SNE1'));
+tsne2Id = find(strcmp(channelList,'bh-SNE2'));
+
+fileName = get(handles.fileName,'String');
+fileDir = uigetdir('Please select the dir to save visne plots');
+groupNum = inputdlg('Please input the number of groups');
+
+for i =1: str2num(groupNum{1,1})
+     groupInfo(i,1) = inputdlg(['Please input the name of the ',num2str(i),'th group']);
+     groupInfo{i,2} = listdlg('ListString',fileName,'PromptString','Please select the files in this group',...
+     'SelectionMode','mutiple','ListSize',[200 300]);
+end
+figure;
+color_str = {'b', 'r', 'g', 'm' ,'y', 'm', 'c', 'k'} ;
+k =0;
+cla reset;
+hold on;
+for i =1: str2num(groupNum{1,1})
+    groupDataIndex = [];
+    for j =1:length(groupInfo{i,2})
+        groupDataIndex = [groupDataIndex ;handles.fileCell{1,groupInfo{i,2}(j)}.findex];
+    end
+        sessionData = handles.sessionData(groupDataIndex,:);
+        k = mod(i,8) + 1;
+        scatter(sessionData(:,tsne1Id),sessionData(:,tsne2Id),10,color_str{k},'filled');  
+end
+hold off;
+legend(groupInfo{:,1},'Interpreter','none','Location','bestoutside');
+set(gcf,'Position',[0 0 1500 1500]);
+saveas(gcf,[fileDir,'\Group_Visne.jpeg']);
+close Figure 1;
+for i =1: str2num(groupNum{1,1})
+    figure;
+    k = 0;
+    groupDataIndex = [];
+    for j =1:length(groupInfo{i,2})
+        groupDataIndex = [groupDataIndex ;handles.fileCell{1,groupInfo{i,2}(j)}.findex];
+    end
+    sessionData = handles.sessionData(groupDataIndex,:);
+    k = mod(i,8) + 1;
+    scatter(sessionData(:,tsne1Id),sessionData(:,tsne2Id),10,color_str{k},'filled');  
+    set(gcf,'Position',[0 0 1500 1500]);
+    title(['Group: ', num2str(i)]);
+    saveas(gcf,[fileDir,'\Group_',num2str(i),'Visne.jpeg']);
+    close Figure 1;
+end
+    
+
+
+     
+    
+
+
+
